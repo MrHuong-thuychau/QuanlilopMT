@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1769aa">
+<title>Thủy Châu Art Class Manager</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+<!-- SheetJS: đọc/ghi Excel .xlsx trực tiếp trên trình duyệt -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div id="app">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-mark">TC</div><div><b>THỦY CHÂU</b><small>ART CLASS MANAGER</small></div></div>
+  <button class="nav active" data-page="dashboard">🏠 Tổng quan</button>
+  <button class="nav" data-page="classes">🏫 Lớp học</button>
+  <button class="nav" data-page="students">👥 Học sinh</button>
+  <button class="nav" data-page="attendance">🗓️ Điểm danh</button>
+  <button class="nav" data-page="scores">🎨 Sổ điểm Mĩ thuật</button>
+  <button class="nav" data-page="seating">🪑 Sơ đồ chỗ ngồi</button>
+  <button class="nav" data-page="reports">📑 Báo cáo</button>
+  <button class="nav" data-page="settings">⚙️ Cài đặt</button>
+  <div class="sidebar-foot">GV Mĩ thuật<br><b>Thầy Hướng • THCS Thủy Châu</b></div>
+</aside>
+<main class="main">
+<header class="topbar">
+  <div><button id="mobileMenu" class="iconbtn">☰</button><span id="pageTitle">Tổng quan</span></div>
+  <div class="top-actions"><span id="classPill" class="pill blue">Chưa chọn lớp</span><button class="btn secondary" id="backupBtn">💾 Sao lưu</button></div>
+</header>
+<section id="content"></section>
+</main>
+</div>
+<div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button class="iconbtn" onclick="closeModal()">×</button></div><div id="modalBody"></div></div></div>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
