@@ -32,8 +32,28 @@ Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 t
 - Giữ nguyên tiêu chí học sinh có năng khiếu: ít nhất 3/5 cột TX1, TX2, TX3, GK, CK đạt từ 9 trở lên.
 
 
-## v3.2 — Chức vụ học sinh
-- Bổ sung cột **Chức vụ** trong danh sách học sinh.
-- Có thể chọn trực tiếp: Lớp trưởng, Lớp phó, Tổ trưởng, Tổ phó, Cán sự môn, Cán sự khác.
-- Chức vụ được lưu theo từng học sinh và tự động đi theo dữ liệu sao lưu.
-- Nhập Excel hỗ trợ cột "Chức vụ"; xuất sổ điểm Excel cũng bao gồm cột này.
+## v3.3 — Đồng bộ cloud đa thiết bị
+### Mô hình
+- Máy vẫn lưu cục bộ để dùng khi mất mạng.
+- Google Sheets + Apps Script làm kho dữ liệu trung tâm.
+- Có 3 thao tác: **Đẩy lên cloud**, **Tải từ cloud**, **Đồng bộ hai chiều**.
+- Có tùy chọn tự động đẩy sau khi lưu.
+- Có mã đồng bộ (`SYNC_KEY`) để tránh người lạ ghi dữ liệu.
+
+### Thiết lập cloud
+1. Tạo một Google Sheet riêng, ví dụ `Du lieu Quan ly lop Mi thuat`.
+2. Vào **Extensions → Apps Script**.
+3. Dán toàn bộ nội dung `google-apps-script.gs`.
+4. Vào **Project Settings → Script properties → Add script property**:
+   - Name: `SYNC_KEY`
+   - Value: một mã bí mật dài, ví dụ `TCMT-2026-Huong-8f2k9x`
+5. **Deploy → New deployment → Web app**.
+6. Execute as: **Me**. Who has access: **Anyone**.
+7. Copy URL kết thúc bằng `/exec`.
+8. Trong app: **Cài đặt → Đồng bộ**, dán URL và đúng mã `SYNC_KEY` → **Lưu cấu hình cloud** → **Đẩy lên cloud**.
+9. Trên máy khác, mở website, nhập cùng URL + mã → **Tải từ cloud**.
+
+### Khuyến nghị
+- Sau khi cấu hình lần đầu, dùng **Đồng bộ hai chiều**.
+- Vẫn giữ chức năng **Xuất bản sao JSON** để có bản sao dự phòng.
+- Không chia sẻ URL Web App và `SYNC_KEY` công khai.
