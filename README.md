@@ -32,7 +32,7 @@ Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 t
 - Giữ nguyên tiêu chí học sinh có năng khiếu: ít nhất 3/5 cột TX1, TX2, TX3, GK, CK đạt từ 9 trở lên.
 
 
-## v3.3 — Đồng bộ cloud đa thiết bị
+## v3.4 — Đồng bộ cloud đa thiết bị ổn định
 ### Mô hình
 - Máy vẫn lưu cục bộ để dùng khi mất mạng.
 - Google Sheets + Apps Script làm kho dữ liệu trung tâm.
@@ -57,3 +57,11 @@ Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 t
 - Sau khi cấu hình lần đầu, dùng **Đồng bộ hai chiều**.
 - Vẫn giữ chức năng **Xuất bản sao JSON** để có bản sao dự phòng.
 - Không chia sẻ URL Web App và `SYNC_KEY` công khai.
+
+
+### v3.4 — Thay đổi kỹ thuật
+- Gộp về một cơ chế Cloud Sync duy nhất; bỏ `sync-fix.js` cũ để tránh xung đột.
+- PUSH dùng form POST để hoạt động ổn định từ GitHub Pages, không phụ thuộc CORS response.
+- PULL/kiểm tra phiên bản dùng JSONP, phù hợp với Google Apps Script Web App.
+- Giữ dữ liệu cục bộ và mốc `_localUpdatedAt`; khi đồng bộ sẽ ưu tiên dữ liệu có thời gian cập nhật mới hơn.
+- Không tự động tải cloud khi mở app để tránh ghi đè dữ liệu ngoài ý muốn; lần đầu trên thiết bị mới dùng **Tải từ cloud** hoặc **Đồng bộ hai chiều**.

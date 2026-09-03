@@ -1,5 +1,5 @@
 const KEY="tc_art_class_manager_v2";
-const BACKUP_VERSION="3.3";
+const BACKUP_VERSION="3.4";
 const DEFAULT={settings:{teacher:"Thầy Hướng",school:"THCS Thủy Châu",schoolYear:"2026–2027"},classes:[],currentClassId:"",students:[],attendance:[],scores:[],seating:[],comments:[],commentBank:["Hoàn thành tốt yêu cầu môn học.","Có ý thức học tập và thực hành tốt.","Thể hiện sự sáng tạo trong bài thực hành.","Có tiến bộ rõ rệt trong học tập.","Hoàn thành sản phẩm đúng yêu cầu.","Cần tích cực hơn trong giờ học.","Cần rèn luyện thêm kỹ năng thực hành.","Cần chú ý hơn đến bố cục và màu sắc."]};
 let state=load(),currentPage="dashboard",dragId=null,syncTimer=null,syncBusy=false;
 function load(){
@@ -234,7 +234,8 @@ function saveSeating(){let cols=Number(document.querySelector("#seatCols").value
 function resetSeating(){let c=curClass(),ss=classStudents();let map=ss.map(s=>s.id);let x=state.seating.find(s=>s.classId===state.currentClassId);if(!x)state.seating.push({classId:state.currentClassId,map});else x.map=map;save();render()}
 function saveSettings(){state.settings.teacher=document.querySelector("#setTeacher").value;state.settings.school=document.querySelector("#setSchool").value;state.settings.schoolYear=document.querySelector("#setYear").value;save();render();toast("Đã lưu")}
 
-function cloudConfig(){return {url:String(state.settings.cloudUrl||"").trim(),key:String(state.settings.cloudKey||"").trim()}}
+function cloudConfig(){return {url:String(state.settings.cloudUrl||"").trim().replace(/\/+$/,""),key:String(state.settings.cloudKey||"").trim()}}
+function validCloudUrl(url){return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)}
 function saveCloudSettings(){
   state.settings.cloudUrl=document.querySelector("#cloudUrl")?.value.trim()||"";
   state.settings.cloudKey=document.querySelector("#cloudKey")?.value.trim()||"";
@@ -245,50 +246,68 @@ function scheduleAutoSync(){
   if(!state.settings?.autoSync||!state.settings?.cloudUrl||!state.settings?.cloudKey||syncBusy)return;
   clearTimeout(syncTimer);syncTimer=setTimeout(()=>pushCloud(true),1800);
 }
-async function cloudFetch(url,options={}){
-  const ctl=new AbortController();const timer=setTimeout(()=>ctl.abort(),15000);
-  try{const r=await fetch(url,{...options,signal:ctl.signal});const text=await r.text();let j;try{j=JSON.parse(text)}catch(e){throw new Error("Cloud trả về dữ liệu không hợp lệ")};if(!r.ok||j.ok===false)throw new Error(j.error||("HTTP "+r.status));return j}finally{clearTimeout(timer)}
+function cloudSnapshot(){return JSON.parse(JSON.stringify(state))}
+function cloudKeepSettings(){return {cloudUrl:state.settings?.cloudUrl||"",cloudKey:state.settings?.cloudKey||"",autoSync:!!state.settings?.autoSync}}
+function cloudForm(){
+  let f=document.getElementById("tcCloudPostForm");
+  if(f)return f;
+  f=document.createElement("form");f.id="tcCloudPostForm";f.method="POST";f.target="tcCloudPostFrame";f.style.display="none";
+  const iframe=document.createElement("iframe");iframe.name="tcCloudPostFrame";iframe.id="tcCloudPostFrame";iframe.style.display="none";
+  document.body.appendChild(iframe);document.body.appendChild(f);return f;
 }
-async function pushCloud(silent=false){
-  const {url,key}=cloudConfig();if(!url||!key){if(!silent)toast("Hãy nhập URL và mã đồng bộ trong Cài đặt");return false}
+function pushCloud(silent=false){
+  const {url,key}=cloudConfig();
+  if(!validCloudUrl(url)){if(!silent)toast("URL Web App chưa đúng. Phải là URL HTTPS kết thúc bằng /exec");return false}
+  if(!key){if(!silent)toast("Hãy nhập mã đồng bộ (SYNC_KEY)");return false}
   if(syncBusy)return false;syncBusy=true;
   try{
-    const clientUpdatedAt=state._localUpdatedAt||new Date().toISOString();
-    const payload={action:"push",key,clientUpdatedAt,data:state};
-    const j=await cloudFetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
-    state._cloudUpdatedAt=j.updatedAt||clientUpdatedAt;state._cloudStatus="Đã đẩy dữ liệu lên cloud";save({skipSync:true});
-    if(!silent){render();toast("☁️ Đã đồng bộ lên cloud")};return true;
-  }catch(e){state._cloudStatus="Lỗi đồng bộ: "+e.message;save({skipSync:true});if(!silent){render();alert("Không thể đồng bộ lên cloud.\n\n"+e.message)};return false}
+    const updatedAt=state._localUpdatedAt||new Date().toISOString();
+    const f=cloudForm();f.action=url;f.innerHTML="";
+    [["action","push"],["key",key],["clientUpdatedAt",updatedAt],["data",JSON.stringify(cloudSnapshot())]].forEach(([n,v])=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i)});
+    f.submit();
+    state._cloudUpdatedAt=updatedAt;state._cloudStatus="Đã gửi dữ liệu lên cloud";save({skipSync:true});
+    if(!silent){render();toast("☁️ Đã gửi dữ liệu lên cloud")}return true;
+  }catch(e){state._cloudStatus="Lỗi gửi cloud: "+e.message;save({skipSync:true});if(!silent)toast("❌ Không gửi được dữ liệu: "+e.message);return false}
   finally{syncBusy=false}
 }
-async function pullCloud(silent=false){
-  const {url,key}=cloudConfig();if(!url||!key){if(!silent)toast("Hãy nhập URL và mã đồng bộ trong Cài đặt");return false}
+function pullCloud(silent=false){
+  const {url,key}=cloudConfig();
+  if(!validCloudUrl(url)){if(!silent)toast("URL Web App chưa đúng. Phải là URL HTTPS kết thúc bằng /exec");return false}
+  if(!key){if(!silent)toast("Hãy nhập mã đồng bộ (SYNC_KEY)");return false}
   if(syncBusy)return false;syncBusy=true;
-  try{
-    const sep=url.includes("?")?"&":"?";const j=await cloudFetch(url+sep+"action=pull&key="+encodeURIComponent(key));
-    if(!j.data){state._cloudStatus="Cloud chưa có dữ liệu";save({skipSync:true});if(!silent){render();toast("Cloud chưa có dữ liệu")};return true}
-    if(!silent&&!confirm("Tải dữ liệu từ cloud sẽ thay thế dữ liệu hiện tại trên máy này. Tiếp tục?"))return false;
-    const keep={cloudUrl:state.settings.cloudUrl,cloudKey:state.settings.cloudKey,autoSync:state.settings.autoSync};
-    state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};state._cloudUpdatedAt=j.updatedAt||new Date().toISOString();state._localUpdatedAt=j.updatedAt||state._localUpdatedAt;state._cloudStatus="Đã tải dữ liệu từ cloud";save({skipSync:true});render();if(!silent)toast("☁️ Đã tải dữ liệu từ cloud");return true;
-  }catch(e){state._cloudStatus="Lỗi đồng bộ: "+e.message;save({skipSync:true});if(!silent){render();alert("Không thể tải dữ liệu từ cloud.\n\n"+e.message)};return false}
-  finally{syncBusy=false}
+  const old=document.getElementById("tcCloudJsonp");if(old)old.remove();
+  const cb="tcCloudPullResult_"+Date.now();
+  window[cb]=function(j){
+    try{
+      if(!j||!j.ok)throw new Error(j?.error||"Cloud không trả dữ liệu hợp lệ");
+      if(!j.data){state._cloudStatus="Cloud chưa có dữ liệu";save({skipSync:true});if(!silent){render();toast("☁️ Cloud chưa có dữ liệu")};return}
+      if(!silent&&!confirm("Tải dữ liệu từ cloud sẽ thay thế dữ liệu hiện tại trên máy này. Tiếp tục?"))return;
+      const keep=cloudKeepSettings();state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};
+      state._cloudUpdatedAt=j.updatedAt||new Date().toISOString();state._localUpdatedAt=state._cloudUpdatedAt;state._cloudStatus="Đã tải dữ liệu từ cloud";save({skipSync:true});render();if(!silent)toast("⬇️ Đã tải dữ liệu từ cloud");
+    }catch(e){state._cloudStatus="Lỗi tải cloud: "+e.message;save({skipSync:true});if(!silent)toast("❌ "+e.message)}
+    finally{syncBusy=false;delete window[cb];const el=document.getElementById("tcCloudJsonp");if(el)el.remove()}
+  };
+  const s=document.createElement("script");s.id="tcCloudJsonp";s.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
+  s.onerror=()=>{syncBusy=false;delete window[cb];s.remove();if(!silent)toast("❌ Không kết nối được Google Apps Script. Kiểm tra URL và quyền Web App.")};
+  document.head.appendChild(s);return true;
 }
-async function syncCloud(){
-  const {url,key}=cloudConfig();if(!url||!key){toast("Hãy nhập URL và mã đồng bộ trong Cài đặt");return}
-  if(syncBusy)return;
-  syncBusy=true;
-  try{
-    const sep=url.includes("?")?"&":"?";const j=await cloudFetch(url+sep+"action=pull&key="+encodeURIComponent(key));
-    const serverAt=j.updatedAt||"";const localAt=state._localUpdatedAt||"";
-    if(j.data && serverAt && (!localAt||serverAt>localAt)){
-      if(!confirm("Cloud có dữ liệu mới hơn máy này. Tải dữ liệu cloud xuống và thay thế dữ liệu hiện tại?"))return;
-      const keep={cloudUrl:state.settings.cloudUrl,cloudKey:state.settings.cloudKey,autoSync:state.settings.autoSync};
-      state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};state._cloudUpdatedAt=serverAt;state._localUpdatedAt=serverAt;state._cloudStatus="Đã nhận dữ liệu mới từ cloud";save({skipSync:true});render();toast("🔄 Đã lấy dữ liệu mới nhất từ cloud");return;
-    }
-    // Nếu máy đang mới hơn hoặc cloud chưa có dữ liệu, đẩy máy này lên.
-    syncBusy=false;await pushCloud(false);
-  }catch(e){state._cloudStatus="Lỗi đồng bộ: "+e.message;save({skipSync:true});render();alert("Đồng bộ thất bại.\n\n"+e.message)}
-  finally{syncBusy=false}
+function syncCloud(){
+  const {url,key}=cloudConfig();if(!validCloudUrl(url)||!key){toast("Hãy nhập URL Web App và mã đồng bộ trong Cài đặt");return}
+  if(syncBusy)return;syncBusy=true;
+  const cb="tcCloudSyncResult_"+Date.now();window[cb]=function(j){
+    try{
+      if(!j||!j.ok)throw new Error(j?.error||"Cloud không phản hồi");
+      const serverAt=j.updatedAt||"",localAt=state._localUpdatedAt||"";
+      if(j.data && serverAt && (!localAt||serverAt>localAt)){
+        if(!confirm("Cloud có dữ liệu mới hơn máy này. Tải dữ liệu cloud xuống và thay thế dữ liệu hiện tại?")){syncBusy=false;return}
+        const keep=cloudKeepSettings();state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};state._cloudUpdatedAt=serverAt;state._localUpdatedAt=serverAt;state._cloudStatus="Đã nhận dữ liệu mới từ cloud";save({skipSync:true});render();toast("🔄 Đã lấy dữ liệu mới nhất từ cloud");syncBusy=false;return;
+      }
+      syncBusy=false;pushCloud(false);
+    }catch(e){syncBusy=false;toast("❌ Đồng bộ thất bại: "+e.message)}
+    finally{delete window[cb];const el=document.getElementById("tcCloudSyncJsonp");if(el)el.remove()}
+  };
+  const s=document.createElement("script");s.id="tcCloudSyncJsonp";s.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
+  s.onerror=()=>{syncBusy=false;delete window[cb];s.remove();toast("❌ Không kết nối được Google Apps Script")};document.head.appendChild(s);
 }
 function exportBackup(){let payload={app:"Thuy Chau Art Class Manager",version:BACKUP_VERSION,exportedAt:new Date().toISOString(),data:state};let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));a.download=`Thuy_Chau_Art_Class_Manager_Backup_v${BACKUP_VERSION}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast("Đã tạo bản sao dữ liệu")}
 function restoreBackup(file){if(!file)return;let r=new FileReader();r.onload=e=>{try{let raw=JSON.parse(e.target.result);let data=raw?.data||raw;if(!data.classes||!data.students)throw new Error("invalid");if(!confirm("Khôi phục sẽ thay thế dữ liệu hiện tại. Tiếp tục?"))return;state={...structuredClone(DEFAULT),...data};state.classes=(state.classes||[]).map(c=>({...c,scoreLocked:!!c.scoreLocked}));save({skipSync:true});render();toast("Đã khôi phục dữ liệu")}catch(err){alert("File sao lưu không hợp lệ hoặc không đúng định dạng.")}};r.readAsText(file)}
