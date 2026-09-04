@@ -1,83 +1,24 @@
-# Thủy Châu Art Class Manager — bản nền v2.0 nâng cấp ổn định
-Bản này được xây dựng lại trực tiếp từ cấu trúc v2.0 để giữ nguyên các chức năng đã ổn định: quản lý lớp, nhập Excel, học sinh, điểm danh, sơ đồ chỗ ngồi kéo-thả, sao lưu.
-## Nâng cấp Mĩ thuật
-- TX1, TX2, TX3, Giữa kỳ, Cuối kỳ.
-- Giá trị điểm: CĐ hoặc 5–10, bước 0,5.
-- CĐ là trạng thái riêng, không phải số.
-- Xếp loại cuối kỳ: Đạt/Chưa đạt.
-- Nhận xét cuối kỳ + ngân hàng mẫu nhận xét tùy chỉnh.
-- Nhập điểm trực tiếp trên bảng và lưu ngay.
-- Tổng quan không tính điểm trung bình: Đạt/CĐ, tỷ lệ, điểm 9/10, học sinh năng khiếu (có ít nhất một điểm >=9).
-- Xuất Excel gồm điểm, xếp loại và nhận xét.
+# THỦY CHÂU ART CLASS MANAGER V4.0
 
+## Đồng bộ V4.0
+- `XUẤT BẢN TOÀN BỘ lên Cloud`: dùng trên máy có bộ dữ liệu chuẩn. Cloud được backup trước khi thay thế.
+- `Tải NGUYÊN TRẠNG từ Cloud`: dùng cho máy mới/thiết bị phụ; thay thế dữ liệu cục bộ bằng đúng dữ liệu Cloud.
+- `Đồng bộ hai chiều`: sau khi các máy đã cùng một baseline. Server dùng version để từ chối ghi đè nếu Cloud đã thay đổi.
+- Cloud trả checksum và client xác nhận checksum logic trước khi báo thành công.
 
-## v3.1 — Màu phân loại điểm
-- 8,5–10: đỏ — Giỏi
-- 6,5–8,0: xanh — Khá
-- 5,0–6,0: tím — Trung bình
-- CĐ: đen/xám — Chưa đạt
-- Màu tự cập nhật theo điểm khi nhập/sửa.
+## Cài Apps Script
+1. Mở Google Sheet dữ liệu. Extensions → Apps Script.
+2. Dán toàn bộ `google-apps-script.gs`.
+3. Script Properties: `SYNC_KEY` = một mã bí mật mới. Không dùng mã đã từng công khai.
+4. Deploy → New deployment → Web app → Execute as Me → Who has access Anyone.
+5. Nếu sửa Apps Script sau khi deploy, tạo deployment/version mới và dùng URL `/exec` của deployment đang hoạt động.
 
-
-## Tiêu chí học sinh có năng khiếu — bản cuối
-Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 trong 5 cột TX1, TX2, TX3, GK, CK đạt từ 9,0 trở lên**.
-
-
-## v3.2 — Sao lưu, báo cáo và khóa sổ
-- Tự lưu dữ liệu sau mỗi thao tác vào trình duyệt.
-- Xuất/khôi phục bản sao JSON.
-- Xuất toàn bộ lớp ra một file Excel; xuất sổ điểm từng lớp.
-- In danh sách lớp và in sổ điểm.
-- Khóa/mở khóa sổ điểm theo từng lớp; khi khóa không thể sửa điểm hoặc xếp loại.
-- Giữ nguyên tiêu chí học sinh có năng khiếu: ít nhất 3/5 cột TX1, TX2, TX3, GK, CK đạt từ 9 trở lên.
-
-
-## v3.4.1 — Đồng bộ cloud đa thiết bị ổn định (merge dữ liệu)
-### Mô hình
-- Máy vẫn lưu cục bộ để dùng khi mất mạng.
-- Google Sheets + Apps Script làm kho dữ liệu trung tâm.
-- Có 3 thao tác: **Đẩy lên cloud**, **Tải từ cloud**, **Đồng bộ hai chiều**.
-- Có tùy chọn tự động đẩy sau khi lưu.
-- Có mã đồng bộ (`SYNC_KEY`) để tránh người lạ ghi dữ liệu.
-
-### Thiết lập cloud
-1. Tạo một Google Sheet riêng, ví dụ `Du lieu Quan ly lop Mi thuat`.
-2. Vào **Extensions → Apps Script**.
-3. Dán toàn bộ nội dung `google-apps-script.gs`.
-4. Vào **Project Settings → Script properties → Add script property**:
-   - Name: `SYNC_KEY`
-   - Value: một mã bí mật dài, ví dụ `TCMT-2026-Huong-8f2k9x`
-5. **Deploy → New deployment → Web app**.
-6. Execute as: **Me**. Who has access: **Anyone**.
-7. Copy URL kết thúc bằng `/exec`.
-8. Trong app: **Cài đặt → Đồng bộ**, dán URL và đúng mã `SYNC_KEY` → **Lưu cấu hình cloud** → **Đẩy lên cloud**.
-9. Trên máy khác, mở website, nhập cùng URL + mã → **Tải từ cloud**.
-
-### Khuyến nghị
-- Sau khi cấu hình lần đầu, dùng **Đồng bộ hai chiều**.
-- Vẫn giữ chức năng **Xuất bản sao JSON** để có bản sao dự phòng.
-- Không chia sẻ URL Web App và `SYNC_KEY` công khai.
-
-
-### v3.4.1 — Thay đổi kỹ thuật
-- Gộp về một cơ chế Cloud Sync duy nhất; bỏ `sync-fix.js` cũ để tránh xung đột.
-- PUSH dùng form POST để hoạt động ổn định từ GitHub Pages, không phụ thuộc CORS response.
-- PULL/kiểm tra phiên bản dùng JSONP, phù hợp với Google Apps Script Web App.
-- Giữ dữ liệu cục bộ và mốc `_localUpdatedAt`; khi đồng bộ sẽ ưu tiên dữ liệu có thời gian cập nhật mới hơn.
-- Không tự động tải cloud khi mở app để tránh ghi đè dữ liệu ngoài ý muốn; lần đầu trên thiết bị mới dùng **Tải từ cloud** hoặc **Đồng bộ hai chiều**.
-
-
-## v3.4.1 — Đồng bộ an toàn
-- Thêm nút **Thiết lập Cloud làm dữ liệu gốc**: sao lưu Cloud hiện tại trước khi thay thế.
-- Thêm nút **Thiết lập máy này từ Cloud** cho thiết bị mới.
-- Push được xác nhận lại bằng pull trước khi kết thúc.
-- Sửa hợp nhất timestamp tombstone, tránh lỗi so sánh ISO date.
-- Auto sync 2 chiều kiểm tra và đẩy lại kết quả hợp nhất khi cần.
-- Google Apps Script tạo sheet ẩn `_APP_BACKUPS` để lưu bản Cloud trước mỗi lần initialize.
-
-### Quy trình khởi tạo lần đầu
-1. Sao lưu dữ liệu trên máy đang có dữ liệu chuẩn.
-2. Deploy phiên bản Apps Script mới.
-3. Trên máy chuẩn: lưu URL + mã đồng bộ, sau đó bấm **Thiết lập Cloud làm dữ liệu gốc**.
-4. Trên máy còn lại: nhập cùng URL + mã, bấm **Thiết lập máy này từ Cloud**.
-5. Kiểm tra dữ liệu trên cả hai máy rồi mới bật **Tự động đồng bộ sau khi lưu**.
+## Quy trình an toàn lần đầu
+1. Trên máy đang có dữ liệu chuẩn: xuất JSON backup.
+2. Tạm tắt Auto Sync trên các máy khác.
+3. Cấu hình URL + SYNC_KEY trên máy chuẩn.
+4. Bấm `XUẤT BẢN TOÀN BỘ lên Cloud`.
+5. Chỉ khi app báo `Cloud đã nhận ĐÚNG toàn bộ dữ liệu` mới sang máy khác.
+6. Máy khác bấm `Tải NGUYÊN TRẠNG từ Cloud`.
+7. Kiểm tra số lớp/học sinh.
+8. Sau khi tất cả cùng baseline, mới bật `Tự động đồng bộ`.
