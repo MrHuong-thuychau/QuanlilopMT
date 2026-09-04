@@ -32,7 +32,7 @@ Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 t
 - Giữ nguyên tiêu chí học sinh có năng khiếu: ít nhất 3/5 cột TX1, TX2, TX3, GK, CK đạt từ 9 trở lên.
 
 
-## v3.4 — Đồng bộ cloud đa thiết bị ổn định
+## v3.4.1 — Đồng bộ cloud đa thiết bị ổn định (merge dữ liệu)
 ### Mô hình
 - Máy vẫn lưu cục bộ để dùng khi mất mạng.
 - Google Sheets + Apps Script làm kho dữ liệu trung tâm.
@@ -59,9 +59,25 @@ Học sinh được thống kê là "Có năng khiếu" khi có **ít nhất 3 t
 - Không chia sẻ URL Web App và `SYNC_KEY` công khai.
 
 
-### v3.4 — Thay đổi kỹ thuật
+### v3.4.1 — Thay đổi kỹ thuật
 - Gộp về một cơ chế Cloud Sync duy nhất; bỏ `sync-fix.js` cũ để tránh xung đột.
 - PUSH dùng form POST để hoạt động ổn định từ GitHub Pages, không phụ thuộc CORS response.
 - PULL/kiểm tra phiên bản dùng JSONP, phù hợp với Google Apps Script Web App.
 - Giữ dữ liệu cục bộ và mốc `_localUpdatedAt`; khi đồng bộ sẽ ưu tiên dữ liệu có thời gian cập nhật mới hơn.
 - Không tự động tải cloud khi mở app để tránh ghi đè dữ liệu ngoài ý muốn; lần đầu trên thiết bị mới dùng **Tải từ cloud** hoặc **Đồng bộ hai chiều**.
+
+
+## v3.4.1 — Đồng bộ an toàn
+- Thêm nút **Thiết lập Cloud làm dữ liệu gốc**: sao lưu Cloud hiện tại trước khi thay thế.
+- Thêm nút **Thiết lập máy này từ Cloud** cho thiết bị mới.
+- Push được xác nhận lại bằng pull trước khi kết thúc.
+- Sửa hợp nhất timestamp tombstone, tránh lỗi so sánh ISO date.
+- Auto sync 2 chiều kiểm tra và đẩy lại kết quả hợp nhất khi cần.
+- Google Apps Script tạo sheet ẩn `_APP_BACKUPS` để lưu bản Cloud trước mỗi lần initialize.
+
+### Quy trình khởi tạo lần đầu
+1. Sao lưu dữ liệu trên máy đang có dữ liệu chuẩn.
+2. Deploy phiên bản Apps Script mới.
+3. Trên máy chuẩn: lưu URL + mã đồng bộ, sau đó bấm **Thiết lập Cloud làm dữ liệu gốc**.
+4. Trên máy còn lại: nhập cùng URL + mã, bấm **Thiết lập máy này từ Cloud**.
+5. Kiểm tra dữ liệu trên cả hai máy rồi mới bật **Tự động đồng bộ sau khi lưu**.

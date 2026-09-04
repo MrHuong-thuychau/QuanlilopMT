@@ -1,21 +1,59 @@
 const KEY="tc_art_class_manager_v2";
-const BACKUP_VERSION="3.4";
+const SYNC_META_KEY=KEY+"_sync_meta";
+const BACKUP_VERSION="3.4.1";
+const SYNC_COLLECTIONS=["classes","students","attendance","scores","seating","comments","commentBank"];
 const DEFAULT={settings:{teacher:"Thầy Hướng",school:"THCS Thủy Châu",schoolYear:"2026–2027"},classes:[],currentClassId:"",students:[],attendance:[],scores:[],seating:[],comments:[],commentBank:["Hoàn thành tốt yêu cầu môn học.","Có ý thức học tập và thực hành tốt.","Thể hiện sự sáng tạo trong bài thực hành.","Có tiến bộ rõ rệt trong học tập.","Hoàn thành sản phẩm đúng yêu cầu.","Cần tích cực hơn trong giờ học.","Cần rèn luyện thêm kỹ năng thực hành.","Cần chú ý hơn đến bố cục và màu sắc."]};
-let state=load(),currentPage="dashboard",dragId=null,syncTimer=null,syncBusy=false;
+let state=load(),currentPage="dashboard",dragId=null,syncTimer=null,syncPollTimer=null,syncBusy=false;
+function clone(x){return JSON.parse(JSON.stringify(x))}
+function hashable(x){try{return JSON.stringify(x)}catch(e){return ""}}
+function syncMetaLoad(){try{return JSON.parse(localStorage.getItem(SYNC_META_KEY)||"{}")||{}}catch(e){return {}}}
+function syncMetaSave(m){localStorage.setItem(SYNC_META_KEY,JSON.stringify(m))}
+function syncSettingsValue(x){return {teacher:x?.teacher||"",school:x?.school||"",schoolYear:x?.schoolYear||""}}
+function prepareSyncMeta(previous,next,now){
+  const m=syncMetaLoad();
+  m.collections=m.collections||{};
+  SYNC_COLLECTIONS.forEach(k=>{
+    if(!m.collections[k])m.collections[k]={};
+    const oldArr=Array.isArray(previous?.[k])?previous[k]:[];
+    const newArr=Array.isArray(next?.[k])?next[k]:[];
+    const keyed=oldArr.some(x=>x&&x.id!=null)||newArr.some(x=>x&&x.id!=null);
+    if(keyed){
+      const oldBy=new Map(oldArr.filter(x=>x&&x.id!=null).map(x=>[String(x.id),hashable(x)]));
+      const newBy=new Map(newArr.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x]));
+      newBy.forEach((x,id)=>{if(!oldBy.has(id)||oldBy.get(id)!==hashable(x))m.collections[k][id]=now});
+      oldBy.forEach((_,id)=>{if(!newBy.has(id))m.collections[k][id]={deletedAt:now}});
+    }else if(hashable(oldArr)!==hashable(newArr)){m.collections[k].__whole=now}
+  });
+  if(hashable(syncSettingsValue(previous?.settings))!==hashable(syncSettingsValue(next?.settings)))m.settingsUpdatedAt=now;
+  return m;
+}
 function load(){
   try{
-    const x={...DEFAULT,...JSON.parse(localStorage.getItem(KEY)||"{}")};
-    x.scores=Array.isArray(x.scores)?x.scores:[];
-    x.comments=Array.isArray(x.comments)?x.comments:[];
+    const raw=JSON.parse(localStorage.getItem(KEY)||"{}");
+    const x={...structuredClone(DEFAULT),...raw};
+    x.scores=Array.isArray(x.scores)?x.scores:[]; x.comments=Array.isArray(x.comments)?x.comments:[];
     x.commentBank=Array.isArray(x.commentBank)&&x.commentBank.length?x.commentBank:DEFAULT.commentBank.slice();
     x.classes=(x.classes||[]).map(c=>({...c,scoreLocked:!!c.scoreLocked}));
+    if(!x._syncMeta){
+      const at=x._localUpdatedAt||x._lastSaved||new Date().toISOString(), m={collections:{},settingsUpdatedAt:at};
+      SYNC_COLLECTIONS.forEach(k=>{m.collections[k]={};const arr=Array.isArray(x[k])?x[k]:[];if(arr.some(v=>v&&v.id!=null))arr.forEach(v=>{if(v&&v.id!=null)m.collections[k][String(v.id)]=at});else m.collections[k].__whole=at});
+      x._syncMeta=m;
+      localStorage.setItem(SYNC_META_KEY,JSON.stringify(m));
+      localStorage.setItem(KEY+"_shadow",JSON.stringify(x));
+    }
     return x;
   }catch(e){return structuredClone(DEFAULT)}
 }
 function save(opts={}){
+  const previous=clone(state);
   state._lastSaved=new Date().toISOString();
   state._localUpdatedAt=state._lastSaved;
+  const oldShadow=localStorage.getItem(KEY+"_shadow");
+  let prevShadow={};try{prevShadow=oldShadow?JSON.parse(oldShadow):{}}catch(e){}
+  state._syncMeta=prepareSyncMeta(prevShadow,state,state._lastSaved);
   localStorage.setItem(KEY,JSON.stringify(state));
+  localStorage.setItem(KEY+"_shadow",JSON.stringify(state));
+  syncMetaSave(state._syncMeta);
   if(!opts.skipSync) scheduleAutoSync();
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
@@ -138,7 +176,7 @@ function renderSettingsPage(){
   <div class="section"><div class="section-head"><h2>⚙️ Cài đặt</h2><button class="btn primary" onclick="saveSettings()">Lưu</button></div><div class="formgrid"><div class="field"><label>Giáo viên</label><input id="setTeacher" class="input" value="${esc(state.settings.teacher)}"></div><div class="field"><label>Trường</label><input id="setSchool" class="input" value="${esc(state.settings.school)}"></div><div class="field"><label>Năm học</label><input id="setYear" class="input" value="${esc(state.settings.schoolYear)}"></div></div></div>
   <div class="section"><h2>☁️ Đồng bộ dữ liệu giữa các máy</h2><p class="muted">Dữ liệu vẫn lưu cục bộ. Khi cấu hình Google Apps Script bên dưới, anh có thể đồng bộ cùng một bộ dữ liệu trên máy ở nhà, máy ở trường và điện thoại.</p>
     <div class="formgrid"><div class="field full"><label>URL Web App Google Apps Script</label><input id="cloudUrl" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(cloud)}"></div><div class="field"><label>Mã đồng bộ</label><input id="cloudKey" class="input" type="password" placeholder="Mã đã đặt trong Apps Script" value="${esc(state.settings.cloudKey||"")}"></div><div class="field"><label style="display:flex;gap:8px;align-items:center"><input id="autoSync" type="checkbox" ${auto?"checked":""}> Tự động đồng bộ sau khi lưu</label></div></div>
-    <div class="toolbar"><button class="btn primary" onclick="saveCloudSettings()">💾 Lưu cấu hình cloud</button><button class="btn secondary" onclick="pullCloud()">⬇️ Tải từ cloud</button><button class="btn secondary" onclick="pushCloud()">⬆️ Đẩy lên cloud</button><button class="btn green" onclick="syncCloud()">🔄 Đồng bộ hai chiều</button></div>
+    <div class="toolbar"><button class="btn primary" onclick="saveCloudSettings()">💾 Lưu cấu hình cloud</button><button class="btn secondary" onclick="pullCloud()">⬇️ Tải từ cloud</button><button class="btn secondary" onclick="pushCloud()">⬆️ Đẩy lên cloud</button><button class="btn green" onclick="syncCloud()">🔄 Đồng bộ hai chiều</button><button class="btn primary" onclick="initializeCloud()">⭐ Thiết lập Cloud làm dữ liệu gốc</button><button class="btn secondary" onclick="loadCloudAsNewDevice()">📥 Thiết lập máy này từ Cloud</button></div>
     <div class="notice"><b>Trạng thái:</b> ${esc(state._cloudStatus||"Chưa đồng bộ")}<br><span class="muted">Lần đồng bộ: ${state._cloudUpdatedAt?new Date(state._cloudUpdatedAt).toLocaleString("vi-VN"):"Chưa có"}</span></div>
   </div>
   <div class="section"><h2>💾 Sao lưu & khôi phục</h2><p class="muted">Dữ liệu tự lưu trong trình duyệt sau mỗi thao tác. Nên xuất bản sao trước khi đổi máy hoặc xóa dữ liệu trình duyệt.</p><div class="toolbar"><button class="btn primary" onclick="exportBackup()">⬇️ Xuất bản sao JSON</button><button class="btn secondary" onclick="document.querySelector('#restoreFile').click()">⬆️ Khôi phục từ JSON</button><input id="restoreFile" type="file" class="hidden-file" accept="application/json,.json" onchange="restoreBackup(this.files[0])"><button class="btn secondary" onclick="exportAllClassesExcel()">📊 Xuất toàn bộ lớp Excel</button></div><div class="notice">Tự động lưu: <b>Đang bật</b>. Lần lưu gần nhất: ${last}</div></div>
@@ -240,74 +278,162 @@ function saveCloudSettings(){
   state.settings.cloudUrl=document.querySelector("#cloudUrl")?.value.trim()||"";
   state.settings.cloudKey=document.querySelector("#cloudKey")?.value.trim()||"";
   state.settings.autoSync=!!document.querySelector("#autoSync")?.checked;
-  save({skipSync:true});render();toast("Đã lưu cấu hình đồng bộ");
+  save({skipSync:true}); startCloudAutoSync(); render(); toast("Đã lưu cấu hình đồng bộ");
 }
 function scheduleAutoSync(){
-  if(!state.settings?.autoSync||!state.settings?.cloudUrl||!state.settings?.cloudKey||syncBusy)return;
-  clearTimeout(syncTimer);syncTimer=setTimeout(()=>pushCloud(true),1800);
+  if(!state.settings?.autoSync||!state.settings?.cloudUrl||!state.settings?.cloudKey)return;
+  clearTimeout(syncTimer); syncTimer=setTimeout(()=>syncCloud(true),2200);
 }
-function cloudSnapshot(){return JSON.parse(JSON.stringify(state))}
+function cloudSnapshot(){const x=clone(state);x._syncMeta=state._syncMeta||syncMetaLoad();return x}
 function cloudKeepSettings(){return {cloudUrl:state.settings?.cloudUrl||"",cloudKey:state.settings?.cloudKey||"",autoSync:!!state.settings?.autoSync}}
 function cloudForm(){
-  let f=document.getElementById("tcCloudPostForm");
-  if(f)return f;
-  f=document.createElement("form");f.id="tcCloudPostForm";f.method="POST";f.target="tcCloudPostFrame";f.style.display="none";
-  const iframe=document.createElement("iframe");iframe.name="tcCloudPostFrame";iframe.id="tcCloudPostFrame";iframe.style.display="none";
+  let f=document.getElementById("tcCloudPostForm"); if(f)return f;
+  f=document.createElement("form"); f.id="tcCloudPostForm"; f.method="POST"; f.target="tcCloudPostFrame"; f.style.display="none";
+  const iframe=document.createElement("iframe"); iframe.name="tcCloudPostFrame"; iframe.id="tcCloudPostFrame"; iframe.style.display="none";
   document.body.appendChild(iframe);document.body.appendChild(f);return f;
+}
+function cloudGet(done,silent=false){
+  const {url,key}=cloudConfig();
+  if(!validCloudUrl(url)||!key){if(!silent)toast("Hãy cấu hình URL Web App và mã đồng bộ trước.");done&&done(null);return false}
+  const old=document.getElementById("tcCloudJsonp");if(old)old.remove();
+  const cb="tcCloudGet_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+  let finished=false;
+  const cleanup=()=>{delete window[cb];document.getElementById("tcCloudJsonp")?.remove()};
+  const finish=(v)=>{if(finished)return;finished=true;cleanup();done&&done(v)};
+  window[cb]=j=>{if(!j||!j.ok){if(!silent)toast("❌ "+(j?.error||"Cloud không trả dữ liệu hợp lệ."));return finish(null)} finish(j)};
+  const script=document.createElement("script");script.id="tcCloudJsonp";script.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
+  script.onerror=()=>{if(!silent)toast("❌ Không kết nối được Google Apps Script.");finish(null)};document.head.appendChild(script);return true;
 }
 function pushCloud(silent=false){
   const {url,key}=cloudConfig();
-  if(!validCloudUrl(url)){if(!silent)toast("URL Web App chưa đúng. Phải là URL HTTPS kết thúc bằng /exec");return false}
-  if(!key){if(!silent)toast("Hãy nhập mã đồng bộ (SYNC_KEY)");return false}
-  if(syncBusy)return false;syncBusy=true;
+  if(!validCloudUrl(url)||!key){if(!silent)toast("Hãy cấu hình URL Web App và mã đồng bộ trước.");return false}
+  if(syncBusy)return false;
+  syncBusy=true;
+  const startedAt=new Date().toISOString();
+  const pushId=crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random();
   try{
-    const updatedAt=state._localUpdatedAt||new Date().toISOString();
-    const f=cloudForm();f.action=url;f.innerHTML="";
-    [["action","push"],["key",key],["clientUpdatedAt",updatedAt],["data",JSON.stringify(cloudSnapshot())]].forEach(([n,v])=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i)});
+    const f=cloudForm(); f.action=url; f.innerHTML="";
+    const payload=cloudSnapshot(); payload._syncPushId=pushId; payload._syncPushStartedAt=startedAt;
+    [["action","push"],["key",key],["clientUpdatedAt",state._localUpdatedAt||startedAt],["data",JSON.stringify(payload)]].forEach(([n,v])=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i)});
     f.submit();
-    state._cloudUpdatedAt=updatedAt;state._cloudStatus="Đã gửi dữ liệu lên cloud";save({skipSync:true});
-    if(!silent){render();toast("☁️ Đã gửi dữ liệu lên cloud")}return true;
-  }catch(e){state._cloudStatus="Lỗi gửi cloud: "+e.message;save({skipSync:true});if(!silent)toast("❌ Không gửi được dữ liệu: "+e.message);return false}
-  finally{syncBusy=false}
-}
-function pullCloud(silent=false){
-  const {url,key}=cloudConfig();
-  if(!validCloudUrl(url)){if(!silent)toast("URL Web App chưa đúng. Phải là URL HTTPS kết thúc bằng /exec");return false}
-  if(!key){if(!silent)toast("Hãy nhập mã đồng bộ (SYNC_KEY)");return false}
-  if(syncBusy)return false;syncBusy=true;
-  const old=document.getElementById("tcCloudJsonp");if(old)old.remove();
-  const cb="tcCloudPullResult_"+Date.now();
-  window[cb]=function(j){
-    try{
-      if(!j||!j.ok)throw new Error(j?.error||"Cloud không trả dữ liệu hợp lệ");
-      if(!j.data){state._cloudStatus="Cloud chưa có dữ liệu";save({skipSync:true});if(!silent){render();toast("☁️ Cloud chưa có dữ liệu")};return}
-      if(!silent&&!confirm("Tải dữ liệu từ cloud sẽ thay thế dữ liệu hiện tại trên máy này. Tiếp tục?"))return;
-      const keep=cloudKeepSettings();state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};
-      state._cloudUpdatedAt=j.updatedAt||new Date().toISOString();state._localUpdatedAt=state._cloudUpdatedAt;state._cloudStatus="Đã tải dữ liệu từ cloud";save({skipSync:true});render();if(!silent)toast("⬇️ Đã tải dữ liệu từ cloud");
-    }catch(e){state._cloudStatus="Lỗi tải cloud: "+e.message;save({skipSync:true});if(!silent)toast("❌ "+e.message)}
-    finally{syncBusy=false;delete window[cb];const el=document.getElementById("tcCloudJsonp");if(el)el.remove()}
-  };
-  const s=document.createElement("script");s.id="tcCloudJsonp";s.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
-  s.onerror=()=>{syncBusy=false;delete window[cb];s.remove();if(!silent)toast("❌ Không kết nối được Google Apps Script. Kiểm tra URL và quyền Web App.")};
-  document.head.appendChild(s);return true;
-}
-function syncCloud(){
-  const {url,key}=cloudConfig();if(!validCloudUrl(url)||!key){toast("Hãy nhập URL Web App và mã đồng bộ trong Cài đặt");return}
-  if(syncBusy)return;syncBusy=true;
-  const cb="tcCloudSyncResult_"+Date.now();window[cb]=function(j){
-    try{
-      if(!j||!j.ok)throw new Error(j?.error||"Cloud không phản hồi");
-      const serverAt=j.updatedAt||"",localAt=state._localUpdatedAt||"";
-      if(j.data && serverAt && (!localAt||serverAt>localAt)){
-        if(!confirm("Cloud có dữ liệu mới hơn máy này. Tải dữ liệu cloud xuống và thay thế dữ liệu hiện tại?")){syncBusy=false;return}
-        const keep=cloudKeepSettings();state={...structuredClone(DEFAULT),...j.data};state.settings={...state.settings,...keep};state._cloudUpdatedAt=serverAt;state._localUpdatedAt=serverAt;state._cloudStatus="Đã nhận dữ liệu mới từ cloud";save({skipSync:true});render();toast("🔄 Đã lấy dữ liệu mới nhất từ cloud");syncBusy=false;return;
+    state._cloudStatus="Đang xác nhận dữ liệu trên cloud…";
+    localStorage.setItem(KEY,JSON.stringify(state));
+    if(!silent)render();
+    let tries=0;
+    const verify=()=>{cloudGet(j=>{
+      if(!j){syncBusy=false;return}
+      const ok=String(j.updatedAt||"")>=startedAt && j.data?true:false;
+      if(ok){
+        state._cloudUpdatedAt=j.updatedAt||new Date().toISOString();
+        state._cloudStatus="Cloud đã xác nhận dữ liệu";
+        localStorage.setItem(KEY,JSON.stringify(state));syncBusy=false;
+        if(!silent){render();toast("☁️ Cloud đã xác nhận dữ liệu");}
+        return;
       }
-      syncBusy=false;pushCloud(false);
-    }catch(e){syncBusy=false;toast("❌ Đồng bộ thất bại: "+e.message)}
-    finally{delete window[cb];const el=document.getElementById("tcCloudSyncJsonp");if(el)el.remove()}
-  };
-  const s=document.createElement("script");s.id="tcCloudSyncJsonp";s.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
-  s.onerror=()=>{syncBusy=false;delete window[cb];s.remove();toast("❌ Không kết nối được Google Apps Script")};document.head.appendChild(s);
+      if(++tries<8){setTimeout(verify,700);return}
+      syncBusy=false;if(!silent){render();toast("⚠️ Chưa xác nhận được Cloud đã nhận dữ liệu.");}
+    },true)};
+    setTimeout(verify,900);
+    return true;
+  }catch(e){syncBusy=false;if(!silent)toast("❌ Không gửi được dữ liệu: "+e.message);return false}
+}
+function mergeCloudData(cloud){
+  const local=clone(state), cm=cloud?cloud._syncMeta||{}:{}, lm=local._syncMeta||syncMetaLoad(), merged=clone(local);
+  SYNC_COLLECTIONS.forEach(k=>{
+    const lArr=Array.isArray(local[k])?local[k]:[], cArr=Array.isArray(cloud?.[k])?cloud[k]:[];
+    const keyed=lArr.some(x=>x&&x.id!=null)||cArr.some(x=>x&&x.id!=null);
+    if(!keyed){
+      const lt=lm.collections?.[k]?.__whole||"", ct=cm.collections?.[k]?.__whole||"";
+      merged[k]=ct>lt?clone(cArr):clone(lArr);
+      return;
+    }
+    const lBy=new Map(lArr.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x])), cBy=new Map(cArr.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x]));
+    const lmK=lm.collections?.[k]||{},cmK=cm.collections?.[k]||{};
+    const ids=new Set([...lBy.keys(),...cBy.keys(),...Object.keys(lmK),...Object.keys(cmK)]),out=[];
+    ids.forEach(id=>{
+      const lt=typeof lmK[id]==="string"?lmK[id]:(lmK[id]?.deletedAt||"");
+      const ct=typeof cmK[id]==="string"?cmK[id]:(cmK[id]?.deletedAt||"");
+      const winner=ct>lt?"cloud":lt>ct?"local":(cBy.has(id)?"cloud":"local");
+      const del=winner==="cloud"?(!!cmK[id]?.deletedAt):(!!lmK[id]?.deletedAt);
+      const item=winner==="cloud"?cBy.get(id):lBy.get(id);
+      if(!del&&item)out.push(clone(item));
+    });
+    merged[k]=out;
+  });
+  const ls=lm.settingsUpdatedAt||"", cs=cm.settingsUpdatedAt||"";
+  merged.settings=cs>ls?{...clone(local.settings||{}),...syncSettingsValue(cloud.settings)}:{...clone(local.settings||{})};
+  merged._syncMeta={collections:{}};
+  SYNC_COLLECTIONS.forEach(k=>{
+    const a=cm.collections?.[k]||{},b=lm.collections?.[k]||{},o={...a,...b};
+    Object.keys(o).forEach(id=>{
+      const av=a[id],bv=b[id];
+      const at=typeof av==="string"?av:(av?.deletedAt||"");
+      const bt=typeof bv==="string"?bv:(bv?.deletedAt||"");
+      if(av!==undefined||bv!==undefined){
+        if(at>bt)o[id]=av; else if(bt>at)o[id]=bv; else if(av?.deletedAt||bv?.deletedAt)o[id]=av?.deletedAt?av:bv;
+      }
+    });
+    merged._syncMeta.collections[k]=o;
+  });
+  merged._syncMeta.settingsUpdatedAt=cs>ls?cs:ls;
+  merged._localUpdatedAt=(String(local._localUpdatedAt||"")>String(cloud?cloud._localUpdatedAt||"":""))?(local._localUpdatedAt||""):(cloud?cloud._localUpdatedAt||"":"");
+  return merged;
+}
+function syncComparable(x){
+  const y=clone(x||{});
+  delete y._cloudStatus;delete y._cloudUpdatedAt;delete y._syncPushId;delete y._syncPushStartedAt;
+  if(y.settings){y.settings={teacher:y.settings.teacher||"",school:y.settings.school||"",schoolYear:y.settings.schoolYear||""};}
+  return hashable(y);
+}
+function applyCloudState(data,status){
+  const keep=cloudKeepSettings(); state={...structuredClone(DEFAULT),...clone(data)}; state.settings={...state.settings,...keep};
+  state._cloudStatus=status||"Đã đồng bộ";
+  localStorage.setItem(KEY,JSON.stringify(state));localStorage.setItem(KEY+"_shadow",JSON.stringify(state));syncMetaSave(state._syncMeta||{});render();
+}
+function pullCloud(silent=false,done){
+  if(syncBusy)return false;syncBusy=true;
+  return cloudGet(j=>{
+    try{
+      if(!j){done&&done(null);return}
+      if(!j.data){if(!silent)toast("☁️ Cloud chưa có dữ liệu");done&&done(null);return}
+      const merged=mergeCloudData(j.data);
+      const needsPush=syncComparable(merged)!==syncComparable(j.data);
+      merged._cloudUpdatedAt=j.updatedAt||"";
+      applyCloudState(merged,"Đã tải và hợp nhất dữ liệu với cloud");
+      if(!silent)toast("🔄 Đã cập nhật dữ liệu mới nhất");done&&done(merged,needsPush);
+    }finally{syncBusy=false}
+  },silent);
+}
+function syncCloud(silent=false){
+  if(syncBusy)return;
+  pullCloud(silent,(merged,needsPush)=>{if(merged)setTimeout(()=>pushCloud(silent),250)});
+}
+function startCloudAutoSync(){
+  clearInterval(syncPollTimer);
+  if(!state.settings?.autoSync||!state.settings?.cloudUrl||!state.settings?.cloudKey)return;
+  syncPollTimer=setInterval(()=>{if(document.hidden||syncBusy)return;pullCloud(true,(merged,needsPush)=>{if(merged&&needsPush)setTimeout(()=>pushCloud(true),250)})},12000);
+}
+function initializeCloud(){
+  const {url,key}=cloudConfig();
+  if(!validCloudUrl(url)||!key)return toast("Hãy lưu URL Web App và mã đồng bộ trước.");
+  if(!confirm("Thiết lập Cloud làm dữ liệu gốc từ THIẾT BỊ NÀY?\n\nCloud hiện tại sẽ được sao lưu trước khi thay thế. Chỉ dùng nút này trên máy đang có dữ liệu chuẩn."))return;
+  if(syncBusy)return;syncBusy=true;
+  const payload=cloudSnapshot();payload._syncPushId=(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
+  const f=cloudForm();f.action=url;f.innerHTML="";
+  [["action","initialize"],["key",key],["data",JSON.stringify(payload)]].forEach(([n,v])=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i)});
+  f.submit();
+  let tries=0;const verify=()=>cloudGet(j=>{if(j?.ok&&j.data?true:false){state._cloudUpdatedAt=j.updatedAt||"";state._cloudStatus="Đã thiết lập Cloud làm dữ liệu gốc";localStorage.setItem(KEY,JSON.stringify(state));syncBusy=false;render();toast("✅ Đã thiết lập Cloud làm dữ liệu gốc");return}if(++tries<8)setTimeout(verify,800);else{syncBusy=false;toast("⚠️ Chưa xác nhận được Cloud. Anh kiểm tra lại Apps Script.")}},true);
+  setTimeout(verify,1000);
+}
+function loadCloudAsNewDevice(){
+  const {url,key}=cloudConfig();if(!validCloudUrl(url)||!key)return toast("Hãy lưu URL Web App và mã đồng bộ trước.");
+  if(!confirm("Tải dữ liệu từ Cloud và THAY THẾ dữ liệu hiện có trên THIẾT BỊ NÀY?\n\nChỉ dùng trên máy mới/máy không có dữ liệu cần giữ lại."))return;
+  if(syncBusy)return;syncBusy=true;
+  cloudGet(j=>{try{
+    if(!j?.data){if(!j)toast("❌ Không lấy được dữ liệu Cloud.");else toast("☁️ Cloud chưa có dữ liệu.");return;}
+    const data=clone(j.data);data._cloudUpdatedAt=j.updatedAt||"";
+    applyCloudState(data,"Đã thiết lập máy này từ Cloud");toast("✅ Máy này đã nhận dữ liệu gốc từ Cloud");
+  }finally{syncBusy=false}},false);
 }
 function exportBackup(){let payload={app:"Thuy Chau Art Class Manager",version:BACKUP_VERSION,exportedAt:new Date().toISOString(),data:state};let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));a.download=`Thuy_Chau_Art_Class_Manager_Backup_v${BACKUP_VERSION}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast("Đã tạo bản sao dữ liệu")}
 function restoreBackup(file){if(!file)return;let r=new FileReader();r.onload=e=>{try{let raw=JSON.parse(e.target.result);let data=raw?.data||raw;if(!data.classes||!data.students)throw new Error("invalid");if(!confirm("Khôi phục sẽ thay thế dữ liệu hiện tại. Tiếp tục?"))return;state={...structuredClone(DEFAULT),...data};state.classes=(state.classes||[]).map(c=>({...c,scoreLocked:!!c.scoreLocked}));save({skipSync:true});render();toast("Đã khôi phục dữ liệu")}catch(err){alert("File sao lưu không hợp lệ hoặc không đúng định dạng.")}};r.readAsText(file)}
@@ -318,4 +444,5 @@ function printClassList(){if(!curClass())return;let ss=classStudents();let w=win
 function printGradebook(){if(!curClass())return;let ss=classStudents();let w=window.open("","_blank");if(!w)return;w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Sổ điểm ${esc(curClass().name)}</title><style>body{font-family:Arial;padding:20px}h2{text-align:center;font-size:18px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #333;padding:5px;text-align:center}td:nth-child(2),td:last-child{text-align:left}th{background:#eee}</style></head><body><h2>SỔ ĐÁNH GIÁ MÔN MĨ THUẬT — ${esc(curClass().name)}</h2><p>Trường: ${esc(state.settings.school)} — GV: ${esc(state.settings.teacher)} — Năm học: ${esc(state.settings.schoolYear)}</p><table><tr><th>STT</th><th>Họ và tên</th><th>TX1</th><th>TX2</th><th>TX3</th><th>GK</th><th>CK</th><th>Xếp loại</th><th>Nhận xét</th></tr>${ss.map((s,i)=>{let z=getScores(s.id);return `<tr><td>${i+1}</td><td>${esc(s.name)}</td><td>${esc(z.TX1??"")}</td><td>${esc(z.TX2??"")}</td><td>${esc(z.TX3??"")}</td><td>${esc(z.GK??"")}</td><td>${esc(z.CK??"")}</td><td>${esc(finalResult(s.id))}</td><td>${esc(getComment(s.id))}</td></tr>`}).join("")}</table><script>window.onload=()=>window.print()</script></body></html>`);w.document.close()}
 function wipeAll(){if(!confirm("Xóa toàn bộ dữ liệu? Không thể hoàn tác."))return;localStorage.removeItem(KEY);state=structuredClone(DEFAULT);render();toast("Đã xóa dữ liệu")}
 render();
-window.closeModal=closeModal;window.go=go;window.selectClass=selectClass;window.showAddClass=showAddClass;window.addClass=addClass;window.editClass=editClass;window.saveClassEdit=saveClassEdit;window.deleteClass=deleteClass;window.showAddStudent=showAddStudent;window.addStudent=addStudent;window.deleteStudent=deleteStudent;window.filterStudents=filterStudents;window.showScore=showScore;window.saveScoreSet=saveScoreSet;window.saveAttendance=saveAttendance;window.importExcel=importExcel;window.handleExcel=handleExcel;window.downloadTemplate=downloadTemplate;window.exportClassExcel=exportClassExcel;window.dragStart=dragStart;window.dragOver=dragOver;window.dropSeat=dropSeat;window.saveSeating=saveSeating;window.resetSeating=resetSeating;window.saveSettings=saveSettings;window.exportBackup=exportBackup;window.restoreBackup=restoreBackup;window.exportAllClassesExcel=exportAllClassesExcel;window.toggleScoreLock=toggleScoreLock;window.toggleScoreLockFor=toggleScoreLockFor;window.printClassList=printClassList;window.printGradebook=printGradebook;window.wipeAll=wipeAll;window.quickScore=quickScore;window.quickFinal=quickFinal;window.manageComments=manageComments;window.applyPreset=applyPreset;window.saveCloudSettings=saveCloudSettings;window.pushCloud=pushCloud;window.pullCloud=pullCloud;window.syncCloud=syncCloud;
+startCloudAutoSync();
+window.closeModal=closeModal;window.initializeCloud=initializeCloud;window.loadCloudAsNewDevice=loadCloudAsNewDevice;window.go=go;window.selectClass=selectClass;window.showAddClass=showAddClass;window.addClass=addClass;window.editClass=editClass;window.saveClassEdit=saveClassEdit;window.deleteClass=deleteClass;window.showAddStudent=showAddStudent;window.addStudent=addStudent;window.deleteStudent=deleteStudent;window.filterStudents=filterStudents;window.showScore=showScore;window.saveScoreSet=saveScoreSet;window.saveAttendance=saveAttendance;window.importExcel=importExcel;window.handleExcel=handleExcel;window.downloadTemplate=downloadTemplate;window.exportClassExcel=exportClassExcel;window.dragStart=dragStart;window.dragOver=dragOver;window.dropSeat=dropSeat;window.saveSeating=saveSeating;window.resetSeating=resetSeating;window.saveSettings=saveSettings;window.exportBackup=exportBackup;window.restoreBackup=restoreBackup;window.exportAllClassesExcel=exportAllClassesExcel;window.toggleScoreLock=toggleScoreLock;window.toggleScoreLockFor=toggleScoreLockFor;window.printClassList=printClassList;window.printGradebook=printGradebook;window.wipeAll=wipeAll;window.quickScore=quickScore;window.quickFinal=quickFinal;window.manageComments=manageComments;window.applyPreset=applyPreset;window.saveCloudSettings=saveCloudSettings;window.pushCloud=pushCloud;window.pullCloud=pullCloud;window.syncCloud=syncCloud;
