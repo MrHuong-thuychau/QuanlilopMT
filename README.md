@@ -1,25 +1,17 @@
-# THỦY CHÂU ART CLASS MANAGER V4.0.1
+# THỦY CHÂU ART CLASS MANAGER — V4.0.3
 
-## Đồng bộ V4.0.1
-- `XUẤT BẢN TOÀN BỘ lên Cloud`: dùng trên máy có bộ dữ liệu chuẩn. Cloud được backup trước khi thay thế.
-- `Tải NGUYÊN TRẠNG từ Cloud`: dùng cho máy mới/thiết bị phụ; thay thế dữ liệu cục bộ bằng đúng dữ liệu Cloud.
-- `Đồng bộ hai chiều`: sau khi các máy đã cùng một baseline. Server dùng version để từ chối ghi đè nếu Cloud đã thay đổi.
-- V4.0.1 có timeout kết nối, polling xác nhận tối đa 20 lần và nút Kiểm tra Cloud.
-- Cloud trả checksum + Publish ID; client chỉ báo thành công khi cả hai khớp với bộ dữ liệu vừa gửi.
+V4 chạy trên GitHub; V5 chạy trực tiếp trên Google Apps Script. Google Sheets của V5 là **nguồn dữ liệu trung tâm**.
 
-## Cài Apps Script
-1. Mở Google Sheet dữ liệu. Extensions → Apps Script.
-2. Dán toàn bộ `google-apps-script.gs`.
-3. Script Properties: `SYNC_KEY` = một mã bí mật mới. Không dùng mã đã từng công khai.
-4. Deploy → New deployment → Web app → Execute as Me → Who has access Anyone.
-5. Nếu sửa Apps Script sau khi deploy, tạo deployment/version mới và dùng URL `/exec` của deployment đang hoạt động.
+## Lần đầu kết nối V4 với dữ liệu V5
+1. Mở V4 → Cài đặt.
+2. Kiểm tra URL Web App V5 và mã đồng bộ.
+3. Bấm **🟦 Lấy dữ liệu V5 làm dữ liệu nền**.
+4. Kiểm tra V4 đã có 16 lớp / 655 học sinh.
+5. Sau đó mới dùng **🔄 Đồng bộ hai chiều**.
 
-## Quy trình an toàn lần đầu
-1. Trên máy đang có dữ liệu chuẩn: xuất JSON backup.
-2. Tạm tắt Auto Sync trên các máy khác.
-3. Cấu hình URL + SYNC_KEY trên máy chuẩn.
-4. Bấm `XUẤT BẢN TOÀN BỘ lên Cloud`.
-5. Chỉ khi app báo `Cloud đã nhận ĐÚNG toàn bộ dữ liệu` mới sang máy khác.
-6. Máy khác bấm `Tải NGUYÊN TRẠNG từ Cloud`.
-7. Kiểm tra số lớp/học sinh.
-8. Sau khi tất cả cùng baseline, mới bật `Tự động đồng bộ`.
+V4.0.3 ghi một cờ nối cầu trong trình duyệt. Trước khi cờ này được thiết lập, nút đồng bộ hai chiều sẽ **không merge dữ liệu cũ của V4** vào V5; V4 sẽ lấy nguyên trạng dữ liệu đang chạy ổn trên V5. Sau khi nối cầu, hai bên mới hợp nhất theo `_syncMeta` và version.
+
+## Nguyên tắc an toàn
+- Không dùng **⭐ XUẤT BẢN TOÀN BỘ** trên V4 để ghi đè V5 nếu không thực sự cần.
+- V5/Google Sheets là dữ liệu chuẩn hiện tại.
+- Có thể dùng **📥 Tải NGUYÊN TRẠNG từ Cloud** để đưa V4 về đúng dữ liệu V5 bất cứ lúc nào.
