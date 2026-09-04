@@ -1,6 +1,6 @@
 const KEY="tc_art_class_manager_v2";
 const SYNC_META_KEY=KEY+"_sync_meta";
-const V5_GS_URL="https://script.google.com/macros/s/AKfycbwdIXXJAscTF9SM0jebK4zagw0t6uPZSJf73Z3tz7bNSvKnReQbKGDmg-2MNU0KdiL9/exec";const V5_GS_KEY="TC-9g6jwyaJgW2VB6cKHzIBnZwaWG4sfXeI";
+const V5_GS_URL="https://script.google.com/macros/s/AKfycbxHt5G8mAW2Cp8VEWKprK2LtV4oLSCP8Sr9PwhLayVrHKNDSJzaytZ4YnuS6Ish3lj1/exec";const V5_GS_KEY="TC-9g6jwyaJgW2VB6cKHzIBnZwaWG4sfXeI";
 const BACKUP_VERSION="4.0.3";
 const V5_BRIDGE_FLAG=KEY+"_v5_bridge_ready";
 const SYNC_COLLECTIONS=["classes","students","attendance","scores","seating","comments","commentBank"];
