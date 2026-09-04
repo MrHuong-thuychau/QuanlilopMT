@@ -1,8 +1,8 @@
 /**
- * THỦY CHÂU ART CLASS MANAGER — CLOUD SYNC V4.0
+ * THỦY CHÂU ART CLASS MANAGER — CLOUD SYNC V4.0.1
  * Google Sheets + Apps Script backend.
  *
- * V4.0 principles:
+ * V4.0.1 principles:
  * - PUBLISH = thay thế toàn bộ dữ liệu Cloud bằng đúng bộ dữ liệu trên máy chuẩn.
  * - PUSH = cập nhật có kiểm soát phiên bản; nếu Cloud đã đổi kể từ lần pull, server TỪ CHỐI ghi đè.
  * - PULL trả version/publishId/checksum để client xác nhận chính xác.
@@ -21,15 +21,15 @@ function ensureSyncMeta_(x,at){const out=JSON.parse(JSON.stringify(x||{})),m=out
 function mergeSync_(current,incoming){
   if(!current)return incoming;if(!incoming)return current;const out=JSON.parse(JSON.stringify(current)),cm=current._syncMeta||{},im=incoming._syncMeta||{},ks=["classes","students","attendance","scores","seating","comments","commentBank"];out._syncMeta={collections:{}};
   ks.forEach(k=>{const ca=Array.isArray(current[k])?current[k]:[],ia=Array.isArray(incoming[k])?incoming[k]:[],keyed=ca.some(x=>x&&x.id!=null)||ia.some(x=>x&&x.id!=null);if(!keyed){const ct=cm.collections?.[k]?.__whole||"",it=im.collections?.[k]?.__whole||"";out[k]=it>ct?ia:ca;out._syncMeta.collections[k]={__whole:it>ct?it:ct};return}const cBy=new Map(ca.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x])),iBy=new Map(ia.filter(x=>x&&x.id!=null).map(x=>[String(x.id),x])),mc=cm.collections?.[k]||{},mi=im.collections?.[k]||{},ids=new Set([...cBy.keys(),...iBy.keys(),...Object.keys(mc),...Object.keys(mi)]),meta={},arr=[];ids.forEach(id=>{const a=mc[id],b=mi[id],at=typeof a==="string"?a:(a?.deletedAt||""),bt=typeof b==="string"?b:(b?.deletedAt||""),inc=bt>at||(!at&&!bt&&iBy.has(id)),chosen=inc?b:a,item=inc?iBy.get(id):cBy.get(id);if(chosen!==undefined)meta[id]=chosen;if(!(chosen&&typeof chosen==="object"&&chosen.deletedAt)&&item)arr.push(item)});out[k]=arr;out._syncMeta.collections[k]=meta});const ct=cm.settingsUpdatedAt||"",it=im.settingsUpdatedAt||"";if(it>ct)out.settings={...current.settings,teacher:incoming.settings?.teacher||"",school:incoming.settings?.school||"",schoolYear:incoming.settings?.schoolYear||""};out._syncMeta.settingsUpdatedAt=it>ct?it:ct;out._localUpdatedAt=it>ct?incoming._localUpdatedAt:current._localUpdatedAt;return out}
-function doGet(e){try{const p=e?.parameter||{};if(p.action!=="pull")return json_({ok:true,service:"ThuyChauArtClassManager",version:"4.0"});if(!keyOk_(p.key))return jsonp_({ok:false,error:"Mã đồng bộ không đúng hoặc chưa cấu hình SYNC_KEY."},p.callback);const sh=getSheet_(),c=readCloud_(sh);return jsonp_({ok:true,data:c.data,updatedAt:c.updatedAt,version:c.version,publishId:c.publishId,checksum:c.checksum,mode:String(sh.getRange("F2").getValue()||"")},p.callback)}catch(err){return jsonp_({ok:false,error:String(err)},e?.parameter?.callback)}}
+function doGet(e){try{const p=e?.parameter||{};if(p.action!=="pull"&&p.action!=="status")return json_({ok:true,service:"ThuyChauArtClassManager",version:"4.0.1"});if(!keyOk_(p.key))return jsonp_({ok:false,error:"Mã đồng bộ không đúng hoặc chưa cấu hình SYNC_KEY."},p.callback);const sh=getSheet_(),c=readCloud_(sh);return jsonp_({ok:true,data:c.data,updatedAt:c.updatedAt,version:c.version,publishId:c.publishId,checksum:c.checksum,mode:String(sh.getRange("F2").getValue()||"")},p.callback)}catch(err){return jsonp_({ok:false,error:String(err)},e?.parameter?.callback)}}
 function doPost(e){
   try{
     const p=e?.parameter||{};let body={};if(e?.postData?.contents){try{body=JSON.parse(e.postData.contents||"{}")}catch(_) {}}
-    const action=body.action||p.action,key=body.key||p.key;if(!["push","publish"].includes(action))return json_({ok:false,error:"Action không hợp lệ trong V4.0."});if(!keyOk_(key))return json_({ok:false,error:"Mã đồng bộ không đúng hoặc chưa cấu hình SYNC_KEY."});
+    const action=body.action||p.action,key=body.key||p.key;if(!["push","publish"].includes(action))return json_({ok:false,error:"Action không hợp lệ trong V4.0.1."});if(!keyOk_(key))return json_({ok:false,error:"Mã đồng bộ không đúng hoặc chưa cấu hình SYNC_KEY."});
     let incoming=body.data!==undefined?body.data:p.data;if(typeof incoming==="string")incoming=JSON.parse(incoming);if(!incoming||typeof incoming!=="object")return json_({ok:false,error:"Dữ liệu không hợp lệ."});
     const lock=LockService.getScriptLock();lock.waitLock(20000);try{const sh=getSheet_(),c=readCloud_(sh),now=new Date().toISOString();incoming=ensureSyncMeta_(incoming,incoming._localUpdatedAt||incoming._lastSaved||now);const publishId=String(incoming._syncPushId||Utilities.getUuid());
       if(action==="publish"){
-        backupCloud_(sh,"V4.0 — trước khi XUẤT BẢN toàn bộ");const ver=c.version+1;const fp=fingerprint_(incoming);sh.getRange("A2:F2").setValues([[JSON.stringify(incoming),now,ver,publishId,fp,"publish"]]);return json_({ok:true,mode:"published",updatedAt:now,version:ver,publishId,checksum:fp,data:incoming});
+        backupCloud_(sh,"V4.0.1 — trước khi XUẤT BẢN toàn bộ");const ver=c.version+1;const fp=fingerprint_(incoming);sh.getRange("A2:F2").setValues([[JSON.stringify(incoming),now,ver,publishId,fp,"publish"]]);return json_({ok:true,mode:"published",updatedAt:now,version:ver,publishId,checksum:fp,data:incoming});
       }
       const base=Number(incoming._baseVersion||0);if(c.data&&base!==c.version)return json_({ok:false,conflict:true,error:"Cloud đã thay đổi sau lần máy này tải dữ liệu. Không ghi đè để bảo toàn dữ liệu mới.",version:c.version,updatedAt:c.updatedAt,publishId:c.publishId,checksum:c.checksum,data:c.data});
       const merged=mergeSync_(c.data,incoming),ver=c.version+1,fp=fingerprint_(merged);sh.getRange("A2:F2").setValues([[JSON.stringify(merged),now,ver,publishId,fp,"push"]]);return json_({ok:true,mode:"pushed",updatedAt:now,version:ver,publishId,checksum:fp,data:merged});

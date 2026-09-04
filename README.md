@@ -1,10 +1,11 @@
-# THỦY CHÂU ART CLASS MANAGER V4.0
+# THỦY CHÂU ART CLASS MANAGER V4.0.1
 
-## Đồng bộ V4.0
+## Đồng bộ V4.0.1
 - `XUẤT BẢN TOÀN BỘ lên Cloud`: dùng trên máy có bộ dữ liệu chuẩn. Cloud được backup trước khi thay thế.
 - `Tải NGUYÊN TRẠNG từ Cloud`: dùng cho máy mới/thiết bị phụ; thay thế dữ liệu cục bộ bằng đúng dữ liệu Cloud.
 - `Đồng bộ hai chiều`: sau khi các máy đã cùng một baseline. Server dùng version để từ chối ghi đè nếu Cloud đã thay đổi.
-- Cloud trả checksum và client xác nhận checksum logic trước khi báo thành công.
+- V4.0.1 có timeout kết nối, polling xác nhận tối đa 20 lần và nút Kiểm tra Cloud.
+- Cloud trả checksum + Publish ID; client chỉ báo thành công khi cả hai khớp với bộ dữ liệu vừa gửi.
 
 ## Cài Apps Script
 1. Mở Google Sheet dữ liệu. Extensions → Apps Script.

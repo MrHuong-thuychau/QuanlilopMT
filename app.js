@@ -1,6 +1,6 @@
 const KEY="tc_art_class_manager_v2";
 const SYNC_META_KEY=KEY+"_sync_meta";
-const BACKUP_VERSION="4.0";
+const BACKUP_VERSION="4.0.1";
 const SYNC_COLLECTIONS=["classes","students","attendance","scores","seating","comments","commentBank"];
 const DEFAULT={settings:{teacher:"Thầy Hướng",school:"THCS Thủy Châu",schoolYear:"2026–2027"},classes:[],currentClassId:"",students:[],attendance:[],scores:[],seating:[],comments:[],commentBank:["Hoàn thành tốt yêu cầu môn học.","Có ý thức học tập và thực hành tốt.","Thể hiện sự sáng tạo trong bài thực hành.","Có tiến bộ rõ rệt trong học tập.","Hoàn thành sản phẩm đúng yêu cầu.","Cần tích cực hơn trong giờ học.","Cần rèn luyện thêm kỹ năng thực hành.","Cần chú ý hơn đến bố cục và màu sắc."]};
 let state=load(),currentPage="dashboard",dragId=null,syncTimer=null,syncPollTimer=null,syncBusy=false;
@@ -179,9 +179,9 @@ function renderSettingsPage(){
   <div class="section"><div class="section-head"><h2>⚙️ Cài đặt</h2><button class="btn primary" onclick="saveSettings()">Lưu</button></div><div class="formgrid"><div class="field"><label>Giáo viên</label><input id="setTeacher" class="input" value="${esc(state.settings.teacher)}"></div><div class="field"><label>Trường</label><input id="setSchool" class="input" value="${esc(state.settings.school)}"></div><div class="field"><label>Năm học</label><input id="setYear" class="input" value="${esc(state.settings.schoolYear)}"></div></div></div>
   <div class="section"><h2>☁️ Đồng bộ dữ liệu giữa các máy</h2><p class="muted">Dữ liệu vẫn lưu cục bộ. Khi cấu hình Google Apps Script bên dưới, anh có thể đồng bộ cùng một bộ dữ liệu trên máy ở nhà, máy ở trường và điện thoại.</p>
     <div class="formgrid"><div class="field full"><label>URL Web App Google Apps Script</label><input id="cloudUrl" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(cloud)}"></div><div class="field"><label>Mã đồng bộ</label><input id="cloudKey" class="input" type="password" placeholder="Mã đã đặt trong Apps Script" value="${esc(state.settings.cloudKey||"")}"></div><div class="field"><label style="display:flex;gap:8px;align-items:center"><input id="autoSync" type="checkbox" ${auto?"checked":""}> Tự động đồng bộ sau khi lưu</label></div></div>
-    <div class="toolbar"><button class="btn primary" onclick="saveCloudSettings()">💾 Lưu cấu hình cloud</button><button class="btn secondary" onclick="loadCloudAsNewDevice()">📥 Tải NGUYÊN TRẠNG từ Cloud</button><button class="btn primary" onclick="publishCloud()">⭐ XUẤT BẢN TOÀN BỘ lên Cloud</button><button class="btn green" onclick="syncCloud()">🔄 Đồng bộ hai chiều</button></div>
+    <div class="toolbar"><button class="btn primary" onclick="saveCloudSettings()">💾 Lưu cấu hình cloud</button><button class="btn secondary" onclick="loadCloudAsNewDevice()">📥 Tải NGUYÊN TRẠNG từ Cloud</button><button class="btn primary" onclick="publishCloud()">⭐ XUẤT BẢN TOÀN BỘ lên Cloud</button><button class="btn secondary" onclick="checkCloud()">🔎 Kiểm tra Cloud</button><button class="btn green" onclick="syncCloud()">🔄 Đồng bộ hai chiều</button></div>
     <div class="notice"><b>Trạng thái:</b> ${esc(state._cloudStatus||"Chưa đồng bộ")}<br><span class="muted">Máy này: <b>${esc(localStatsText(state))}</b> · Cloud phiên bản: <b>${state._cloudVersion??"Chưa có"}</b> · Lần cập nhật: ${state._cloudUpdatedAt?new Date(state._cloudUpdatedAt).toLocaleString("vi-VN"):"Chưa có"}</span></div>
-    <div class="notice"><b>Quy trình V4.0:</b> Máy chuẩn dùng <b>⭐ XUẤT BẢN TOÀN BỘ</b> một lần. Máy khác dùng <b>📥 Tải NGUYÊN TRẠNG</b>. Sau đó mới bật <b>Đồng bộ hai chiều</b>. Nếu Cloud đã thay đổi, V4.0 sẽ <b>từ chối ghi đè</b> thay vì lấy dữ liệu cũ đè lên dữ liệu mới.</div>
+    <div class="notice"><b>Quy trình V4.0.1:</b> Máy chuẩn dùng <b>⭐ XUẤT BẢN TOÀN BỘ</b> một lần. Máy khác dùng <b>📥 Tải NGUYÊN TRẠNG</b>. Sau đó mới bật <b>Đồng bộ hai chiều</b>. Nếu Cloud đã thay đổi, V4.0.1 sẽ <b>từ chối ghi đè</b> thay vì lấy dữ liệu cũ đè lên dữ liệu mới.</div>
   </div>
   <div class="section"><h2>💾 Sao lưu & khôi phục</h2><p class="muted">Dữ liệu tự lưu trong trình duyệt sau mỗi thao tác. Nên xuất bản sao trước khi đổi máy hoặc xóa dữ liệu trình duyệt.</p><div class="toolbar"><button class="btn primary" onclick="exportBackup()">⬇️ Xuất bản sao JSON</button><button class="btn secondary" onclick="document.querySelector('#restoreFile').click()">⬆️ Khôi phục từ JSON</button><input id="restoreFile" type="file" class="hidden-file" accept="application/json,.json" onchange="restoreBackup(this.files[0])"><button class="btn secondary" onclick="exportAllClassesExcel()">📊 Xuất toàn bộ lớp Excel</button></div><div class="notice">Tự động lưu: <b>Đang bật</b>. Lần lưu gần nhất: ${last}</div></div>
   <div class="section"><h2>🔒 Khóa sổ điểm</h2><p class="muted">Khóa điểm theo từng lớp sau khi hoàn tất học kỳ. Điểm và xếp loại không thể sửa khi đã khóa.</p>${lockRows}</div>
@@ -307,10 +307,12 @@ function cloudGet(done,silent=false){
   const old=document.getElementById("tcCloudJsonp");if(old)old.remove();
   const cb="tcCloudGet_"+Date.now()+"_"+Math.random().toString(36).slice(2); let finished=false;
   const cleanup=()=>{delete window[cb];document.getElementById("tcCloudJsonp")?.remove()};
-  const finish=v=>{if(finished)return;finished=true;cleanup();done&&done(v)};
+  const finish=v=>{if(finished)return;finished=true;clearTimeout(timer);cleanup();done&&done(v)};
   window[cb]=j=>{if(!j||!j.ok){if(!silent)toast("❌ "+(j?.error||"Cloud không trả dữ liệu hợp lệ."));return finish(null)}finish(j)};
   const script=document.createElement("script");script.id="tcCloudJsonp";script.src=url+"?action=pull&key="+encodeURIComponent(key)+"&callback="+encodeURIComponent(cb)+"&_="+Date.now();
-  script.onerror=()=>{if(!silent)toast("❌ Không kết nối được Google Apps Script.");finish(null)};document.head.appendChild(script);return true;
+  script.onerror=()=>{if(!silent)toast("❌ Không kết nối được Google Apps Script.");finish(null)};
+  const timer=setTimeout(()=>{if(!silent)toast("⏱️ Cloud không phản hồi sau 10 giây. Kiểm tra deployment Web App.");finish(null)},10000);
+  document.head.appendChild(script);return true;
 }
 function localStatsText(x){const d=x||state;return `${Array.isArray(d.classes)?d.classes.length:0} lớp / ${Array.isArray(d.students)?d.students.length:0} học sinh`}
 function v4Hash(x){
@@ -327,11 +329,16 @@ function v4Comparable(x){
 function v4Fingerprint(x){return v4Hash(v4Comparable(x))}
 function postCloud(action,payload,done){
   const {url,key}=cloudConfig();
-  if(!validCloudUrl(url)||!key){toast("Hãy cấu hình URL Web App và mã đồng bộ trước.");return false}
+  if(!validCloudUrl(url)||!key){toast("Hãy cấu hình URL Web App và mã đồng bộ trước.");done&&done({sent:false,error:"URL/mã đồng bộ chưa hợp lệ"});return false}
   const f=cloudForm();f.action=url;f.innerHTML="";
   const data=JSON.stringify(payload);
   [["action",action],["key",key],["data",data]].forEach(([n,v])=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i)});
-  f.submit(); setTimeout(()=>done&&done(),300); return true;
+  let called=false; const finish=info=>{if(called)return;called=true;done&&done(info||{sent:true})};
+  const iframe=document.getElementById("tcCloudPostFrame");
+  if(iframe){iframe.onload=()=>setTimeout(()=>finish({sent:true,loaded:true}),800);}
+  f.submit();
+  setTimeout(()=>finish({sent:true,loaded:false}),2500);
+  return true;
 }
 function applyCloudState(data,status,meta={}){
   const keep=cloudKeepSettings(); state={...structuredClone(DEFAULT),...clone(data)}; state.settings={...state.settings,...keep};
@@ -345,26 +352,36 @@ function applyCloudState(data,status,meta={}){
 function verifyCloudExact(expected,expectedPublishId,done,tries=0){
   cloudGet(j=>{
     if(j?.data){
-      const fp=v4Fingerprint(j.data), pid=String(j.publishId||j.data?._syncPublishId||"");
+      const fp=v4Fingerprint(j.data),pid=String(j.publishId||j.data?._syncPushId||"");
       if(fp===expected && (!expectedPublishId||pid===expectedPublishId))return done(true,j);
     }
-    if(tries<12)return setTimeout(()=>verifyCloudExact(expected,expectedPublishId,done,tries+1),700);
+    if(tries<20)return setTimeout(()=>verifyCloudExact(expected,expectedPublishId,done,tries+1),1000);
     done(false,j);
   },true);
+}
+function checkCloud(){
+  if(syncBusy)return;syncBusy=true;state._cloudStatus="🔎 Đang kiểm tra Cloud…";localStorage.setItem(KEY,JSON.stringify(state));render();
+  cloudGet(j=>{syncBusy=false;if(!j){state._cloudStatus="❌ Không kết nối được Cloud";localStorage.setItem(KEY,JSON.stringify(state));render();return}
+    state._cloudStatus="☁️ Cloud: "+localStatsText(j.data||{})+" · phiên bản "+(j.version||0);
+    state._cloudUpdatedAt=j.updatedAt||"";state._cloudVersion=j.version||0;state._cloudPublishId=j.publishId||"";state._cloudChecksum=j.checksum||"";localStorage.setItem(KEY,JSON.stringify(state));render();
+    toast("☁️ "+localStatsText(j.data||{})+" · phiên bản "+(j.version||0));
+  },false);
 }
 function publishCloud(silent=false){
   const {url,key}=cloudConfig();
   if(!validCloudUrl(url)||!key){if(!silent)toast("Hãy lưu URL Web App và mã đồng bộ trước.");return false}
   if(syncBusy)return false;
   if(!state.classes.length){if(!confirm("Thiết bị hiện chưa có lớp nào. Vẫn xuất bản dữ liệu rỗng lên Cloud?"))return false}
-  if(!confirm("XUẤT BẢN TOÀN BỘ DỮ LIỆU HIỆN TẠI LÊN CLOUD?\n\nCloud sẽ được sao lưu trước, sau đó thay thế bằng đúng dữ liệu trên máy này. Chỉ dùng trên máy đang có dữ liệu chuẩn (ví dụ 16 lớp)."))return false;
+  if(!confirm("XUẤT BẢN TOÀN BỘ DỮ LIỆU HIỆN TẠI LÊN CLOUD?\n\nCloud sẽ được sao lưu trước, sau đó thay thế bằng đúng dữ liệu trên máy này. Chỉ dùng trên máy đang có dữ liệu chuẩn."))return false;
   syncBusy=true;const payload=cloudSnapshot();const publishId=crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random();payload._syncPushId=publishId;payload._syncPushStartedAt=new Date().toISOString();
-  const expected=v4Fingerprint(payload);state._cloudStatus="Đang xuất bản toàn bộ dữ liệu…";localStorage.setItem(KEY,JSON.stringify(state));render();
-  postCloud("publish",payload,()=>verifyCloudExact(expected,publishId,(ok,j)=>{
-    syncBusy=false;
-    if(ok){applyCloudState(payload,"✅ Cloud đã nhận ĐÚNG toàn bộ dữ liệu",{updatedAt:j.updatedAt,version:j.version,publishId:j.publishId,checksum:j.checksum});if(!silent)toast("☁️ Xuất bản thành công — "+localStatsText(payload));}
-    else{state._cloudStatus="❌ Không xác nhận được dữ liệu đã lên Cloud";localStorage.setItem(KEY,JSON.stringify(state));render();if(!silent)toast("⚠️ Cloud chưa khớp dữ liệu trên máy. Chưa bật đồng bộ.")}
-  }));
+  const expected=v4Fingerprint(payload);state._cloudStatus="⏳ Đang gửi toàn bộ dữ liệu lên Cloud…";localStorage.setItem(KEY,JSON.stringify(state));render();
+  postCloud("publish",payload,()=>{state._cloudStatus="🔎 Đã gửi. Đang chờ Cloud xác nhận…";localStorage.setItem(KEY,JSON.stringify(state));render();
+    verifyCloudExact(expected,publishId,(ok,j)=>{
+      syncBusy=false;
+      if(ok){applyCloudState(payload,"✅ XUẤT BẢN THÀNH CÔNG — Cloud khớp 100%",{updatedAt:j.updatedAt,version:j.version,publishId:j.publishId,checksum:j.checksum});if(!silent)toast("☁️ Xuất bản thành công — "+localStatsText(payload));}
+      else{state._cloudStatus="❌ XUẤT BẢN CHƯA ĐƯỢC XÁC NHẬN. Dữ liệu máy vẫn được giữ nguyên.";localStorage.setItem(KEY,JSON.stringify(state));render();if(!silent)toast("⚠️ Cloud chưa xác nhận dữ liệu. Không tải ngược về máy.");}
+    });
+  });
   return true;
 }
 function pushCloud(silent=false,baseVersion=null){
@@ -419,4 +436,4 @@ function printGradebook(){if(!curClass())return;let ss=classStudents();let w=win
 function wipeAll(){if(!confirm("Xóa toàn bộ dữ liệu? Không thể hoàn tác."))return;localStorage.removeItem(KEY);state=structuredClone(DEFAULT);render();toast("Đã xóa dữ liệu")}
 render();
 startCloudAutoSync();
-window.closeModal=closeModal;window.initializeCloud=initializeCloud;window.publishCloud=publishCloud;window.loadCloudAsNewDevice=loadCloudAsNewDevice;window.go=go;window.selectClass=selectClass;window.showAddClass=showAddClass;window.addClass=addClass;window.editClass=editClass;window.saveClassEdit=saveClassEdit;window.deleteClass=deleteClass;window.showAddStudent=showAddStudent;window.addStudent=addStudent;window.deleteStudent=deleteStudent;window.filterStudents=filterStudents;window.showScore=showScore;window.saveScoreSet=saveScoreSet;window.saveAttendance=saveAttendance;window.importExcel=importExcel;window.handleExcel=handleExcel;window.downloadTemplate=downloadTemplate;window.exportClassExcel=exportClassExcel;window.dragStart=dragStart;window.dragOver=dragOver;window.dropSeat=dropSeat;window.saveSeating=saveSeating;window.resetSeating=resetSeating;window.saveSettings=saveSettings;window.exportBackup=exportBackup;window.restoreBackup=restoreBackup;window.exportAllClassesExcel=exportAllClassesExcel;window.toggleScoreLock=toggleScoreLock;window.toggleScoreLockFor=toggleScoreLockFor;window.printClassList=printClassList;window.printGradebook=printGradebook;window.wipeAll=wipeAll;window.quickScore=quickScore;window.quickFinal=quickFinal;window.manageComments=manageComments;window.applyPreset=applyPreset;window.saveCloudSettings=saveCloudSettings;window.pushCloud=pushCloud;window.pullCloud=pullCloud;window.syncCloud=syncCloud;
+window.closeModal=closeModal;window.initializeCloud=initializeCloud;window.publishCloud=publishCloud;window.loadCloudAsNewDevice=loadCloudAsNewDevice;window.go=go;window.selectClass=selectClass;window.showAddClass=showAddClass;window.addClass=addClass;window.editClass=editClass;window.saveClassEdit=saveClassEdit;window.deleteClass=deleteClass;window.showAddStudent=showAddStudent;window.addStudent=addStudent;window.deleteStudent=deleteStudent;window.filterStudents=filterStudents;window.showScore=showScore;window.saveScoreSet=saveScoreSet;window.saveAttendance=saveAttendance;window.importExcel=importExcel;window.handleExcel=handleExcel;window.downloadTemplate=downloadTemplate;window.exportClassExcel=exportClassExcel;window.dragStart=dragStart;window.dragOver=dragOver;window.dropSeat=dropSeat;window.saveSeating=saveSeating;window.resetSeating=resetSeating;window.saveSettings=saveSettings;window.exportBackup=exportBackup;window.restoreBackup=restoreBackup;window.exportAllClassesExcel=exportAllClassesExcel;window.toggleScoreLock=toggleScoreLock;window.toggleScoreLockFor=toggleScoreLockFor;window.printClassList=printClassList;window.printGradebook=printGradebook;window.wipeAll=wipeAll;window.quickScore=quickScore;window.quickFinal=quickFinal;window.manageComments=manageComments;window.applyPreset=applyPreset;window.saveCloudSettings=saveCloudSettings;window.pushCloud=pushCloud;window.pullCloud=pullCloud;window.syncCloud=syncCloud;window.checkCloud=checkCloud;
